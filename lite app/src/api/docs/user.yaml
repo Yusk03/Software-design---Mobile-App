@@ -1,0 +1,1022 @@
+openapi: 3.0.1
+info:
+  title: Abills user API
+  version: 0.0.10
+servers:
+  - url: https://demo.abills.net.ua:9443/api.cgi
+tags:
+  - name: user
+    description: Работа с пользователем
+  - name: internet
+    description: Работа с услугой Интернет
+  - name: msgs
+    description: Работа с заявками пользователя
+  - name: abon
+    description: Работа с периодическими списаниями
+  - name: paysys
+    description: Работа с платежными системами
+paths:
+  /users/login:
+    post:
+      tags:
+        - user
+      summary: Авторизация пользователя
+      operationId: loginUser
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              $ref: '#/components/schemas/UserLoginBody'
+        required: true
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserLogin'
+  /user/{UID}:
+    get:
+      tags:
+        - user
+      summary: Информация о пользователе
+      operationId: userInfo
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+      security:
+        - USER_SID: [ ]
+  /user/{UID}/pi:
+    get:
+      tags:
+        - user
+      summary: Персональная информация пользователя
+      operationId: userPersonalInfo
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPi'
+      security:
+        - USER_SID: [ ]
+  /user/{UID}/credit:
+    get:
+      tags:
+        - user
+      summary: Информация об установке кредита
+      operationId: userCreditInfo
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserCreditInfo'
+      security:
+        - USER_SID: [ ]
+    post:
+      tags:
+        - user
+      summary: Установка кредита пользователю
+      operationId: userSetCredit
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserCredit'
+      security:
+        - USER_SID: [ ]
+  /user/{UID}/internet:
+    get:
+      tags:
+        - internet
+      summary: Информация об интернет услугах пользователя
+      operationId: userInternetInfo
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInternet'
+      security:
+        - USER_SID: [ ]
+  /user/{UID}/internet/{ID}:
+    put:
+      tags:
+        - internet
+      summary: Смена ТП
+      operationId: userChangeInternetTP
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+        - name: ID
+          in: path
+          description: ID услуги Интернет
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              $ref: '#/components/schemas/body'
+        required: true
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternetChangeTPSuccess'
+        400:
+          description: Ошибка
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternetChangeTPError'
+      security:
+        - USER_SID: [ ]
+      x-codegen-request-body-name: body
+  /user/{UID}/internet/{ID}/speed:
+    get:
+      tags:
+        - internet
+      summary: Скорость ТП
+      operationId: userTpSpeed
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+        - name: ID
+          in: path
+          description: ID услуги Интернет
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternetSpeed'
+      security:
+        - USER_SID: [ ]
+  /user/{UID}/internet/{ID}/holdup:
+    post:
+      tags:
+        - internet
+      summary: Приостановление услуги Интернет
+      operationId: userInternetHoldup
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+        - name: ID
+          in: path
+          description: ID услуги Интернет
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              $ref: '#/components/schemas/body_1'
+        required: true
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HoldupReply'
+      security:
+        - USER_SID: [ ]
+      x-codegen-request-body-name: body
+    delete:
+      tags:
+        - internet
+      summary: Удаление рассписания на приостановление услуги Интернет
+      operationId: userDeleteInternetHoldup
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+        - name: ID
+          in: path
+          description: ID услуги Интернет
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HoldupReply'
+      security:
+        - USER_SID: [ ]
+  /user/{UID}/internet/tariffs:
+    get:
+      tags:
+        - internet
+      summary: Доступные для изменения ТП, на которые хватает денег
+      operationId: userInternetAvailableToChangeTariffs
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAvailableTariffs'
+      security:
+        - USER_SID: [ ]
+  /user/{UID}/internet/tariffs/all:
+    get:
+      tags:
+        - internet
+      summary: Все доступные для изменения ТП
+      operationId: userInternetAvailableToChangeTariffsAll
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAvailableTariffs'
+      security:
+        - USER_SID: [ ]
+  /user/{UID}/internet/{ID}/warnings:
+    get:
+      tags:
+        - internet
+      summary: Информация о списаниях
+      operationId: userInternetWarnings
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+        - name: ID
+          in: path
+          description: ID услуги
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternetWarnings'
+      security:
+        - USER_SID: [ ]
+  /user/{UID}/abon:
+    get:
+      tags:
+        - abon
+      summary: Информация об периодических списаниях пользователя
+      operationId: userAbonInfo
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAbon'
+      security:
+        - USER_SID: [ ]
+  /user/{UID}/msgs:
+    get:
+      tags:
+        - msgs
+      summary: Список заявок пользователя
+      operationId: userMsgsList
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MsgsArray'
+      security:
+        - USER_SID: [ ]
+    post:
+      tags:
+        - msgs
+      summary: Создание заявки
+      operationId: userAddMessage
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              $ref: '#/components/schemas/MsgsAdd'
+        required: true
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MsgsAdded'
+      security:
+        - USER_SID: [ ]
+      x-codegen-request-body-name: body
+  /user/{UID}/msgs/{ID}:
+    get:
+      tags:
+        - msgs
+      summary: Информация о заявке пользователя
+      operationId: userMsgs
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+        - name: ID
+          in: path
+          description: ID заявки
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MsgsInfo'
+      security:
+        - USER_SID: [ ]
+  /user/{UID}/msgs/{ID}/reply:
+    get:
+      tags:
+        - msgs
+      summary: Список заявок пользователя
+      operationId: userMsgReplyList
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+        - name: ID
+          in: path
+          description: ID заявки
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MsgsReplyArray'
+      security:
+        - USER_SID: [ ]
+    post:
+      tags:
+        - msgs
+      summary: Создание заявки
+      operationId: userAddReply
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+        - name: ID
+          in: path
+          description: ID заявки
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              $ref: '#/components/schemas/MsgsReplyAdd'
+        required: true
+      responses:
+        200:
+          description: Успешное выполнение
+          content: { }
+      security:
+        - USER_SID: [ ]
+      x-codegen-request-body-name: body
+  /user/{UID}/paysys/systems:
+    get:
+      tags:
+        - paysys
+      summary: Список платежных систем доступных пользователю
+      operationId: userPaysysList
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaysysArray'
+      security:
+        - USER_SID: [ ]
+  /user/{UID}/paysys/pay:
+    post:
+      tags:
+        - paysys
+      summary: Формирование ссылки на быструю оплату
+      operationId: userPaysysPay
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              $ref: '#/components/schemas/PaysysPayBody'
+        required: true
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaysysPay'
+      security:
+        - USER_SID: [ ]
+  /user/{UID}/paysys/transaction/status:
+    post:
+      tags:
+        - paysys
+      summary: Проверка статуса платежа
+      operationId: userPaysysTransactionStatus
+      parameters:
+        - name: UID
+          in: path
+          description: UID пользователя
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              $ref: '#/components/schemas/PaysysTransactionStatusBody'
+        required: true
+      responses:
+        200:
+          description: Успешное выполнение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaysysTransactionStatus'
+      security:
+        - USER_SID: [ ]
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        login:
+          type: string
+          example: "3433"
+        deposit:
+          type: integer
+          example: 1600
+        credit:
+          type: integer
+          example: 100
+        creditDate:
+          type: string
+          example: 2021-08-13
+        billId:
+          type: integer
+          example: 12
+        gid:
+          type: integer
+          example: 57
+        disable:
+          type: integer
+          example: 0
+        deleted:
+          type: integer
+          example: 0
+    UserPi:
+      type: object
+      properties:
+        fio:
+          type: string
+          example: Иванов Иван Иванович
+        addressFull:
+          type: string
+          example: ул.Адамца, 121, 3
+        age:
+          type: integer
+          example: 33
+        locationId:
+          type: integer
+          example: 1444
+        contractId:
+          type: string
+          example: "575493"
+        email:
+          type: array
+          items:
+            type: string
+            example: test@gmail.com
+        phone:
+          type: array
+          items:
+            type: string
+            example: "380976574568"
+    UserInternet:
+      type: array
+      items:
+        $ref: '#/components/schemas/UserInternet_inner'
+    InternetSpeed:
+      type: array
+      items:
+        $ref: '#/components/schemas/InternetSpeed_inner'
+    UserAbon:
+      type: array
+      items:
+        $ref: '#/components/schemas/UserAbon_inner'
+    UserCredit:
+      type: object
+      properties:
+        creditSum:
+          type: integer
+          example: 500
+        creditChangePrice:
+          type: integer
+          example: 100
+        uid:
+          type: integer
+          example: 11135
+        creditDays:
+          type: string
+          example: "3"
+        creditMonthChanges:
+          type: string
+          example: "1"
+    UserCreditInfo:
+      type: object
+      properties:
+        creditChgPrice:
+          type: string
+          example: "500"
+        creditMonthChanges:
+          type: string
+          example: "1"
+        creditSum:
+          type: string
+          example: "800"
+        creditDays:
+          type: string
+          example: "3"
+    UserAvailableTariffs:
+      type: array
+      items:
+        $ref: '#/components/schemas/UserAvailableTariffs_inner'
+    HoldupReply:
+      type: object
+      properties:
+        success:
+          type: integer
+          example: 1
+        msg:
+          type: string
+    InternetWarnings:
+      type: object
+      properties:
+        messageType:
+          type: string
+          example: success
+        warning:
+          type: string
+          example: следующее списание через 7 дней
+        daysToFee:
+          type: string
+          example: "2"
+        sum:
+          type: integer
+          example: 150
+        abonDate:
+          type: string
+          example: 2021-10-01
+    InternetChangeTPSuccess:
+      type: object
+      properties:
+        success:
+          type: integer
+          example: 1
+        uid:
+          type: integer
+    InternetChangeTPError:
+      type: object
+      properties:
+        error:
+          type: integer
+          example: 145
+        message:
+          type: string
+        messageType:
+          type: string
+        messageTitle:
+          type: string
+    MsgsAdd:
+      type: object
+      properties:
+        chapter:
+          type: integer
+          example: 3
+        message:
+          type: string
+          example: Some message
+        subject:
+          type: string
+          example: Message subject
+        priority:
+          type: integer
+          example: 2
+    MsgsAdded:
+      type: object
+      properties:
+        insertId:
+          type: integer
+          example: 43
+        msgId:
+          type: integer
+          example: 43
+        affected:
+          type: integer
+          example: 1
+    MsgsInfo:
+      type: object
+      properties:
+        subject:
+          type: string
+          example: Message user api subject
+        message:
+          type: string
+          example: Test message from user api
+        chapterName:
+          type: string
+          example: Второй раздел
+        chapter:
+          type: integer
+          example: 3
+        priority:
+          type: integer
+          example: 2
+        state:
+          type: integer
+          example: 0
+        date:
+          type: string
+          example: 2021-09-02 13:20:37
+    MsgsArray:
+      type: array
+      items:
+        $ref: '#/components/schemas/MsgsInfo'
+    MsgsReply:
+      type: object
+      properties:
+        uid:
+          type: integer
+          example: 0
+        aid:
+          type: integer
+          example: 2
+        id:
+          type: integer
+          example: 54
+        text:
+          type: string
+          example: some reply text
+        datetime:
+          type: string
+          example: 2021-09-02 12:50:47
+    MsgsReplyAdd:
+      type: object
+      properties:
+        reply_text:
+          type: string
+          example: Some reply text
+        reply_subject:
+          type: string
+          example: Subject
+    MsgsReplyArray:
+      type: array
+      items:
+        $ref: '#/components/schemas/MsgsReply'
+    body:
+      type: object
+      properties:
+        tp_id:
+          type: integer
+          example: 4
+        date:
+          type: string
+          example: 2021-09-17
+        period:
+          type: integer
+    body_1:
+      type: object
+      properties:
+        from_date:
+          type: string
+          example: 2021-08-14
+        to_date:
+          type: string
+          example: 2021-08-17
+    UserInternet_inner:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2
+        tpName:
+          type: string
+          example: Премиум до 100м
+        tpId:
+          type: integer
+          example: 41
+        internetStatus:
+          type: integer
+          example: 0
+        cid:
+          type: string
+          example: 14:11:11:11:11:c1
+        monthFee:
+          type: integer
+          example: 250
+        dayFee:
+          type: integer
+          example: 0
+    InternetSpeed_inner:
+      type: object
+      properties:
+        inSpeed:
+          type: integer
+          example: 2999
+        outSpeed:
+          type: integer
+          example: 3000
+        tpNum:
+          type: integer
+          example: 155
+    UserAbon_inner:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2
+        name:
+          type: string
+          example: Test abon TP
+        price:
+          type: integer
+          example: 100
+        period:
+          type: integer
+          example: 1
+        nextAbon:
+          type: string
+          example: 2021-09-01
+        comments:
+          type: string
+        description:
+          type: string
+          example: Test description
+    UserAvailableTariffs_inner:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2
+        name:
+          type: string
+          example: Премиум до 100м
+        tpId:
+          type: integer
+          example: 41
+        monthFee:
+          type: integer
+          example: 250
+        dayFee:
+          type: integer
+          example: 0
+        comments:
+          type: string
+    PaysysArray:
+      type: array
+      items:
+        $ref: '#/components/schemas/PaymentSystem'
+    PaymentSystem:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: LiqPay
+        module:
+          type: string
+          example: Liqpay.pm
+    PaysysPayBody:
+      type: object
+      properties:
+        systemId:
+          type: integer
+          example: 1
+        sum:
+          type: integer
+          example: 100
+        operationId:
+          type: string
+          example: 123456789
+    PaysysPay:
+      type: object
+      properties:
+        operationId:
+          type: string
+          example: 123456789
+        transactionId:
+          type: string
+          example: Liqpay:123456789
+        url:
+          type: string
+          example: https://www.liqpay.ua/api/3/checkout?data=123456789&signature=123456789
+    PaysysTransactionStatus:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        datetime:
+          type: string
+          example: "2022-01-01 01:01:01"
+        login:
+          type: string
+          example: test
+        status:
+          type: integer
+          example: 1
+        systemId:
+          type: integer
+          example: 1
+        sum:
+          type: integer
+          example: 100
+        uid:
+          type: integer
+          example: 1
+        transactionId:
+          type: string
+          example: Liqpay:123456789
+    PaysysTransactionStatusBody:
+      type: object
+      properties:
+        transactionId:
+          type: string
+          example: Liqpay:123456789
+    UserLoginBody:
+      type: object
+      properties:
+        login:
+          type: string
+          example: testuser
+        password:
+          type: string
+          example: testuser
+    UserLogin:
+      type: object
+      properties:
+       login:
+         type: string
+         example: testuser
+       sid:
+         type: string
+         example: sW44EJZLyWDMeXAV
+       uid:
+         type: integer
+         example: 1
+  securitySchemes:
+    USER_SID:
+      type: apiKey
+      name: USERSID
+      in: header
