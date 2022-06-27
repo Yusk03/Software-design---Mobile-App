@@ -6,8 +6,8 @@ package Paysys::Api;
 =head VERSION
 
   DATE: 20211227
-  UPDATE: 20220210
-  VERSION: 0.02
+  UPDATE: 20220524
+  VERSION: 0.05
 
 =cut
 
@@ -16,7 +16,9 @@ use warnings FATAL => 'all';
 
 use Paysys;
 use Paysys::Init;
+use Abills::Base qw(mk_unique_value);
 
+my Paysys $Paysys;
 our %lang;
 require 'Abills/modules/Paysys/lng_english.pl';
 
@@ -26,23 +28,32 @@ require 'Abills/modules/Paysys/lng_english.pl';
 =cut
 #**********************************************************
 sub new {
-  my ($class, $db, $conf, $admin, $lang, $debug) = @_;
+    my ($class, $db, $conf, $admin, $lang, $debug, $type) = @_;
 
-  my $self = {
-    db    => $db,
-    admin => $admin,
-    conf  => $conf,
-    lang  => $lang,
-    debug => $debug
-  };
+    my $self = {
+        db    => $db,
+        admin => $admin,
+        conf  => $conf,
+        lang  => $lang,
+        debug => $debug
+    };
 
-  bless($self, $class);
+    bless($self, $class);
 
-  return $self;
+    $self->{routes_list} = ();
+
+    if ($type eq 'user') {
+        $self->{routes_list} = $self->user_routes();
+    }
+
+    $Paysys = Paysys->new($self->{db}, $self->{admin}, $self->{conf});
+    $Paysys->{debug} = $self->{debug};
+
+    return $self;
 }
 
 #**********************************************************
-=head2 routes_list() - Returns available API paths
+=head2 user_routes() - Returns available API paths
 
   Returns:
     {
@@ -97,98 +108,142 @@ sub new {
 
 =cut
 #**********************************************************
-sub routes_list {
-  my $self = shift;
-  my $Paysys = Paysys->new($self->{db}, $self->{admin}, $self->{conf});
-  $Paysys->{debug} = $self->{debug};
+sub user_routes {
+    my $self = shift;
 
-  return [
-    {
-      method      => 'GET',
-      path        => '/user/:uid/paysys/systems/',
-      handler     => sub {
-        my ($path_params, $query_params) = @_;
+    return [
+        {
+            method      => 'GET',
+            path        => '/user/:uid/paysys/systems/',
+            handler     => sub {
+                my ($path_params, $query_params) = @_;
+                require Users;
+                Users->import();
+                my $Users = Users->new($self->{db}, $self->{admin}, $self->{conf});
 
-        $Paysys->paysys_connect_system_list({
-          NAME      => '_SHOW',
-          MODULE    => '_SHOW',
-          ID        => '_SHOW',
-          STATUS    => 1,
-          COLS_NAME => 1,
-        });
-      },
-      credentials => [
-        'USER'
-      ]
-    },
-    {
-      method      => 'POST',                                  #TODO: GET
-      path        => '/user/:uid/paysys/transaction/status/', #TODO :id/
-      handler     => sub {
-        my ($path_params, $query_params) = @_;
+                my $users_info = $Users->list({
+                    GID       => '_SHOW',
+                    UID       => $path_params->{uid},
+                    COLS_NAME => 1,
+                });
 
-        $Paysys->list({
-          TRANSACTION_ID => $query_params->{TRANSACTION_ID} || '--',
-          UID            => $path_params->{uid},
-          STATUS         => '_SHOW',
-          DOMAIN_ID      => '_SHOW',
-          COLS_NAME      => 1,
-          SORT           => 1
-        });
-      },
-      credentials => [
-        'USER'
-      ]
-    },
-    {
-      method      => 'POST',
-      path        => '/user/:uid/paysys/pay/',
-      handler     => sub {
-        my ($path_params, $query_params) = @_;
+                my $allowed_systems = $Paysys->groups_settings_list({
+                    GID       => $users_info->[0]->{gid},
+                    PAYSYS_ID => '_SHOW',
+                    COLS_NAME => 1,
+                });
 
-        if (!defined($query_params->{SYSTEM_ID})) {
-          return {
-            errno  => '601',
-            errstr => 'No value: systemId'
-          }
-        }
-        elsif (!defined($query_params->{SUM})) {
-          return {
-            errno  => '602',
-            errstr => 'No value: sum'
-          }
-        }
-        elsif (!defined($query_params->{OPERATION_ID})) {
-          return {
-            errno  => '603',
-            errstr => 'No value: operationId'
-          }
-        }
+                my $systems = $Paysys->paysys_connect_system_list({
+                    NAME      => '_SHOW',
+                    MODULE    => '_SHOW',
+                    ID        => '_SHOW',
+                    PAYSYS_ID => '_SHOW',
+                    STATUS    => 1,
+                    COLS_NAME => 1,
+                });
 
-        my $paysys = $Paysys->paysys_connect_system_list({
-          SHOW_ALL_COLUMNS => 1,
-          STATUS           => 1,
-          COLS_NAME        => 1,
-          ID               => $query_params->{SYSTEM_ID} || '--'
-        });
+                if (!$users_info->[0]->{gid}) {
+                    my $gid_list = $Users->groups_list({
+                        COLS_NAME      => 1,
+                        GID            => '0'
+                    });
 
-        if ($paysys == []) {
-          return [];
-        }
-        else {
-          return $self->paysys_link({
-            UID          => $path_params->{uid},
-            SUM          => $query_params->{SUM},
-            OPERATION_ID => $query_params->{OPERATION_ID},
-            MODULE       => $paysys,
-          })
-        }
-      },
-      credentials => [
-        'USER'
-      ]
-    },
-  ]
+                    if (!$gid_list) {
+                        $allowed_systems = $systems;
+                    }
+                }
+
+                my @systems_list;
+                foreach my $allowed_system (@{$allowed_systems}) {
+                    foreach my $system (@{$systems}) {
+                        next if ($system->{paysys_id} != $allowed_system->{paysys_id});
+                        my $Module = _configure_load_payment_module($system->{module}, 1);
+                        next if (ref $Module eq 'HASH' || !$Module->can('fast_pay_link'));
+                        push(@systems_list, $system);
+                    }
+                }
+
+                return \@systems_list || [];
+            },
+            credentials => [
+                'USER', 'USERBOT'
+            ]
+        },
+        {
+            method      => 'POST',                                  #TODO: GET
+            path        => '/user/:uid/paysys/transaction/status/', #TODO :id/
+            handler     => sub {
+                my ($path_params, $query_params) = @_;
+
+                $Paysys->list({
+                    TRANSACTION_ID => $query_params->{TRANSACTION_ID} || '--',
+                    UID            => $path_params->{uid},
+                    STATUS         => '_SHOW',
+                    DOMAIN_ID      => '_SHOW',
+                    COLS_NAME      => 1,
+                    SORT           => 1
+                });
+            },
+            credentials => [
+                'USER'
+            ]
+        },
+        {
+            method      => 'POST',
+            path        => '/user/:uid/paysys/pay/',
+            handler     => sub {
+                my ($path_params, $query_params) = @_;
+                my $sum = $query_params->{SUM} || 0;
+                my $operation_id = $query_params->{OPERATION_ID} || '';
+
+                if (!defined $query_params->{SYSTEM_ID}) {
+                    return {
+                        errno  => '601',
+                        errstr => 'No value: systemId'
+                    }
+                }
+                if (!$sum) {
+                    require Users;
+                    Users->import();
+                    my $Users = Users->new($self->{db}, $self->{admin}, $self->{conf});
+
+                    my $users_info = $Users->list({
+                        DEPOSIT   => '_SHOW',
+                        UID       => $path_params->{uid},
+                        COLS_NAME => 1,
+                    });
+
+                    my $deposit = abs(sprintf("%.2f", $users_info->[0]->{deposit}));
+                    $sum = ($users_info->[0]->{deposit} > 0) ? 1 : $deposit;
+                }
+                if (!$operation_id) {
+                    $operation_id = mk_unique_value(9, { SYMBOLS => '0123456789' }),
+                }
+
+                my $paysys = $Paysys->paysys_connect_system_list({
+                    SHOW_ALL_COLUMNS => 1,
+                    STATUS           => 1,
+                    COLS_NAME        => 1,
+                    ID               => $query_params->{SYSTEM_ID} || '--'
+                });
+
+                if ($paysys == []) {
+                    return [];
+                }
+                else {
+                    return $self->paysys_link({
+                        UID          => $path_params->{uid},
+                        SUM          => $sum,
+                        OPERATION_ID => $operation_id,
+                        MODULE       => $paysys,
+                    })
+                }
+            },
+            credentials => [
+                'USER', 'USERBOT'
+            ]
+        },
+    ]
 }
 
 #**********************************************************
@@ -202,35 +257,35 @@ sub routes_list {
       MODULE        - Paysys module
 
   Result:
-    id of shift
+    fastpay url or Errno
 
 =cut
 #**********************************************************
 sub paysys_link {
-  my $self = shift;
-  my ($attr) = @_;
-  my %LANG = (%{$self->{lang}}, %lang);
-  my $module = $attr->{MODULE}->[0]->{module};
-  my $Module = _configure_load_payment_module($module, 1);
+    my $self = shift;
+    my ($attr) = @_;
+    my %LANG = (%{$self->{lang}}, %lang);
+    my $Module = _configure_load_payment_module($attr->{MODULE}->[0]->{module}, 1);
 
-  if (ref $Module eq 'HASH') {
-    return $Module;
-  }
+    if (ref $Module eq 'HASH') {
+        return $Module;
+    }
 
-  if ($Module->can('fast_pay_link')) {
-    my $Paysys_plugin = $Module->new($self->{db}, $self->{admin}, $self->{conf}, { lang => \%LANG });
-    return $Paysys_plugin->fast_pay_link({
-      UID          => $attr->{UID},
-      SUM          => $attr->{SUM},
-      OPERATION_ID => $attr->{OPERATION_ID},
-    });
-  }
-  else {
-    return {
-      errno  => '610',
-      errstr => 'No fast pay link for this module'
-    };
-  }
+    if ($Module->can('fast_pay_link')) {
+        my $Paysys_plugin = $Module->new($self->{db}, $self->{admin}, $self->{conf}, { lang => \%LANG });
+        my $Users = Users->new($self->{db}, $self->{admin}, $self->{conf});
+        return $Paysys_plugin->fast_pay_link({
+            SUM          => $attr->{SUM},
+            OPERATION_ID => $attr->{OPERATION_ID},
+            USER         => $Users->info($attr->{UID}),
+        });
+    }
+    else {
+        return {
+            errno  => '610',
+            errstr => 'No fast pay link for this module'
+        };
+    }
 }
 
 1;
