@@ -55,7 +55,7 @@ $ yarn
 ```bash
 $ yarn android
 ```
-**4.** Start bundling
+**4.** Start bundling app
 ```bash
 $ yarn start
 ```
