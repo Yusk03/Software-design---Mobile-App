@@ -55,6 +55,10 @@ $ yarn
 ```bash
 $ yarn android
 ```
+**4.** Start bundling
+```bash
+$ yarn start
+```
 
 #### *or use Android Studio*.
 
