@@ -41,6 +41,9 @@ Here's a brief high-level overview of the tech stack the Well app uses:
 - ["React Native"](https://reactnative.dev/)
 - ["MySQL"](https://www.mysql.com/)
 
+## 📲 Download app from Google play
+["Download"](https://play.google.com/store/apps/details?id=com.abillslite)
+
 ## 🎉 Get started
 
 **1.** Clone project
