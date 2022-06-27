@@ -38,12 +38,12 @@ our @EXPORT_OK = qw(
 );
 
 #**********************************************************
-=head2 json_former($request) - hash2json
+=head2 json_former($request) - value to json
 
   Arguments
     $request (strinf|arr|hash)
     $attr
-      ESCAPE_DQ           - escape double quotes
+      ESCAPE_DQ           - escape double quotes on response string
       USE_CAMELIZE        - camelize keys of hash
       CONTROL_CHARACTERS  - escape \t and \n
 
@@ -56,8 +56,6 @@ sub json_former {
   my ($request, $attr) = @_;
   my @text_arr = ();
 
-  #TODO: if data is string, but contains only digits, it's returned as numbers
-
   if (ref $request eq 'ARRAY') {
     foreach my $key (@{$request}) {
       push @text_arr, json_former($key, $attr);
@@ -69,19 +67,19 @@ sub json_former {
       my $val = json_former($request->{$key}, $attr);
 
       if ($attr->{USE_CAMELIZE}) {
-        my $new_key = camelize($key);
+        my $new_key = camelize($key, { RM_SPACES => 1 });
         $request->{$new_key} = $request->{$key};
         $key = $new_key;
       }
 
       $attr->{ESCAPE_DQ} ? push @text_arr, qq{\\"$key\\":$val} :
-        push @text_arr, qq{\"$key\":$val};
+          push @text_arr, qq{\"$key\":$val};
     }
     return '{' . join(', ', @text_arr) . '}';
   }
   else {
     $request //= '';
-    $request =~ s/"/\\"/gm;
+    $attr->{ESCAPE_DQ} ? $request =~ s/"/\\\\\\"/gm : $request =~ s/"/\\"/gm;
     if ($attr->{CONTROL_CHARACTERS}){
       $request =~ s/[\t]/\\t/g;
       $request =~ s/[\n]/\\n/g;
@@ -89,22 +87,43 @@ sub json_former {
 
     $request =~ s/[\x{00}-\x{1f}]+//ig;
 
-    if ($request =~ '^([0])' && $request =~'^\w{2,}$') {
-      $attr->{ESCAPE_DQ} ? return qq{\\"$request\\"} :
-        return qq{\"$request\"};
+    if ($request =~ '<str_>') {
+      $request =~ s/<str_>//;
+      return qq{\"$request\"};
     }
-    elsif (!$request && !($request =~ '[0]')){
-      $attr->{ESCAPE_DQ} ? return qq{\\"$request\\"} :
-        return qq{\"$request\"};
+    elsif ($attr->{BOOL_VALUES} && $request =~ /^(true|false|null)$/) {
+      return qq{$request};
     }
-    elsif ($request =~ '^-?\d*\.?\d+$') {
+    elsif (_check_is_number($request)) {
       return qq{$request};
     }
     else {
       $attr->{ESCAPE_DQ} ? return qq{\\"$request\\"} :
-        return qq{\"$request\"};
+          return qq{\"$request\"};
     }
   }
+}
+
+#**********************************************************
+=head2 _check_is_number($value) - check is argument is number
+
+  Arguments
+    $value: string | number - check value
+
+  Result
+    $result: boolean - is number or not
+
+=cut
+#**********************************************************
+sub _check_is_number {
+  my $value = shift;
+  no warnings 'numeric';
+
+  return if utf8::is_utf8($value);
+  return unless length((my $dummy = "") & $value);
+  return unless 0 + $value eq $value;
+  return 1 if $value * 0 == 0;
+  return -1; # inf/nan
 }
 
 #***********************************************************

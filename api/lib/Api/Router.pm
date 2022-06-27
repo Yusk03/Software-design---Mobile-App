@@ -53,6 +53,7 @@ sub preprocess {
   my $self = shift;
   my ($url, $query_params) = @_;
 
+  $url  =~ s/\?.+//g;
   my @params = split('/', $url);
   my $resource_name = $params[1] || q{};
   my $resource_name_user_api = $params[3] || q{};
@@ -90,14 +91,16 @@ sub preprocess {
     $self->{resource_own} = $Paths->load_own_resource_info({
       package => $resource_name_user_api,
       modules => $self->{modules},
-      debug   => $self->{debug}
+      debug   => $self->{debug},
+      type    => 'user',
     });
   }
   elsif ($resource_name ne 'user') {
     $self->{resource_own} = $Paths->load_own_resource_info({
       package => $resource_name,
       modules => $self->{modules},
-      debug   => $self->{debug}
+      debug   => $self->{debug},
+      type    => 'admin',
     });
   }
 
@@ -122,7 +125,7 @@ sub transform {
   my $self = shift;
   my ($transformer) = @_;
 
-  $self->{result} = $transformer->($self->{result}, $self->{response_type});
+  $self->{result} = $transformer->($self->{result});
 }
 
 #***********************************************************

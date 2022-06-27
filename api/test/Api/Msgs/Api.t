@@ -31,7 +31,7 @@ use Abills::Defs;
 use Init_t qw(test_runner folder_list help);
 use Abills::Base qw(parse_arguments);
 use Admins;
-use Paysys;
+use Msgs;
 
 our (
   %conf
@@ -45,7 +45,23 @@ my $db = Abills::SQL->connect(
   }
 );
 my $admin = Admins->new($db, \%conf);
-my $Paysys = Paysys->new($db, $admin, \%conf);
+my $Msgs = Msgs->new($db, $admin, \%conf);
+my $Users = Users->new($db, $admin, \%conf);
+
+my $user = $Users->list({
+  LOGIN     => $conf{API_TEST_USER_LOGIN} || 'test',
+  COLS_NAME => 1,
+});
+
+my $chapters = $Msgs->chapters_list({
+  INNER_CHAPTER => 0,
+  COLS_NAME     => 1,
+});
+
+my $msgs_list = $Msgs->messages_list({
+  UID => $user->[0]->{uid} || '---',
+  COLS_NAME     => 1,
+});
 
 my $ARGS = parse_arguments(\@ARGV);
 
@@ -57,47 +73,31 @@ if (($ARGV[0] && lc($ARGV[0]) eq 'help') || defined($ARGS->{help}) || defined($A
 my $apiKey = $ARGS->{KEY} || $ARGV[$#ARGV] || q{};
 my @test_list = folder_list($ARGS, $RealBin);
 my $debug = $ARGS->{DEBUG} || 0;
-my @tests = ();
 
 foreach my $test (@test_list) {
-  if ($test->{path} =~ /\/transaction\/status\//g) {
-    my $list = $Paysys->list({
-      TRANSACTION_ID => '_SHOW',
-      LOGIN          => ($conf{API_TEST_USER_LOGIN} || 'test'),
-      COLS_NAME      => 1
-    });
+  if ($test->{path} =~ /user\/:uid\/msgs\/:id\//g) {
+    my $id = (scalar(@{$msgs_list})) ? $msgs_list->[0]->{id} : '';
+    $test->{path} =~ s/:id/$id/g;
 
-    $test->{body}->{transactionId} = $list->[0]->{transaction_id};
-  }
-  elsif ($test->{path} =~ /\/pay\//g && $test->{name} eq 'USER_PAYSYS_PAY') {
-    my $list = $Paysys->paysys_connect_system_list({
-      MODULE    => '_SHOW',
-      STATUS    => 1,
-      COLS_NAME => 1,
-    });
-
-    foreach my $paysys_module (@{$list}) {
-      my %_test = %{$test};
-      my ($paysys_name) = $paysys_module->{module} =~ /(.+)\.pm/;
-      my $module = "Paysys::systems::$paysys_name";
-      eval "use $module";
-
-      if ($module->can('fast_pay_link')) {
-        $_test{name} = "USER_PAYSYS_PAY_$paysys_name";
-        $_test{body}->{systemId} = $paysys_module->{id};
-        $_test{body}->{operationId} = int(rand(1000000));
-        $_test{body}->{sum} = 1;
-        push @tests, \%_test;
-      }
+    if ($test->{method} eq 'POST') {
+      $test->{body}->{reply_text} = 'Reply message from test';
     }
   }
-  push @tests, $test;
+  elsif ($test->{path} =~ /user\/:uid\/msgs\/:id\/reply\//g) {
+    my $id = (scalar(@{$msgs_list})) ? $msgs_list->[0]->{id} : '';
+    $test->{path} =~ s/:id/$id/g;
+  }
+  elsif ($test->{path} =~ /user\/:uid\/msgs\//g && $test->{method} eq 'POST') {
+    $test->{body}->{chapter} = $chapters->[0]->{id};
+    $test->{body}->{message} = 'Test message from test';
+    $test->{body}->{subject} = 'Test subject from test';
+    $test->{body}->{priority} = 1;
+  }
 }
-
 test_runner({
   apiKey => $apiKey,
   debug  => $debug
-}, \@tests);
+}, \@test_list);
 
 done_testing();
 

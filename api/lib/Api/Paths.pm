@@ -52,8 +52,8 @@ sub load_own_resource_info {
     return 0;
   }
   else {
-    my $module_obj = $attr->{package}->new($self->{db}, $self->{conf}, $self->{admin}, $self->{lang}, $attr->{debug});
-    return $module_obj->routes_list();
+    my $module_obj = $attr->{package}->new($self->{db}, $self->{conf}, $self->{admin}, $self->{lang}, $attr->{debug}, $attr->{type});
+    return $module_obj->{routes_list};
   }
 }
 
@@ -114,7 +114,7 @@ sub load_own_resource_info {
 =cut
 #**********************************************************
 sub list {
-  shift;
+  my $self = shift;
   #TODO: for each path, add list of $query_params that may be passed from API client to function
   #TODO: check how it works with groups, multidoms
   #TODO: on some routes it returns array [..., ...] when it found data, and empty object {} when not found. example: '/user/:uid/msgs/:id/reply/'
@@ -811,125 +811,6 @@ sub list {
         ]
       }
     ],
-    msgs      => [
-      {
-        method      => 'POST',
-        path        => '/msgs/',
-        handler     => sub {
-          my ($path_params, $query_params, $module_obj) = @_;
-
-          $module_obj->message_add({
-            %$query_params
-          });
-        },
-        module      => 'Msgs',
-        credentials => [
-          'ADMIN'
-        ]
-      },
-      {
-        method      => 'GET',
-        path        => '/msgs/:id/',
-        handler     => sub {
-          my ($path_params, $query_params, $module_obj) = @_;
-
-          $module_obj->message_info($path_params->{id});
-        },
-        module      => 'Msgs',
-        credentials => [
-          'ADMIN'
-        ]
-      },
-      {
-        method      => 'POST',
-        path        => '/msgs/list/',
-        handler     => sub {
-          my ($path_params, $query_params, $module_obj) = @_;
-
-          $module_obj->messages_list({
-            %$query_params,
-            COLS_NAME    => 1,
-            SUBJECT      => '_SHOW',
-            STATE_ID     => '_SHOW',
-            DATE         => '_SHOW'
-          });
-        },
-        module      => 'Msgs',
-        credentials => [
-          'ADMIN'
-        ]
-      },
-      {
-        method      => 'POST',
-        path        => '/msgs/:id/reply/',
-        handler     => sub {
-          my ($path_params, $query_params, $module_obj) = @_;
-
-          $module_obj->message_reply_add({
-            %$query_params,
-            ID => $path_params->{id}
-          });
-        },
-        module      => 'Msgs',
-        credentials => [
-          'ADMIN'
-        ]
-      },
-      {
-        method      => 'GET',
-        path        => '/msgs/:id/reply/',
-        handler     => sub {
-          my ($path_params, $query_params, $module_obj) = @_;
-
-          $module_obj->messages_reply_list({
-            %$query_params,
-            MSG_ID    => $path_params->{id},
-            LOGIN     => '_SHOW',
-            ADMIN     => '_SHOW',
-            COLS_NAME => 1
-          });
-        },
-        module      => 'Msgs',
-        type        => 'ARRAY',
-        credentials => [
-          'ADMIN'
-        ]
-      },
-      {
-        #TODO: we can save attachment with wrong filesize. fix it?
-        method       => 'POST',
-        path         => '/msgs/reply/:reply_id/attachment/',
-        handler      => sub {
-          my ($path_params, $query_params, $module_obj) = @_;
-
-          $module_obj->attachment_add({
-            %$query_params,
-            REPLY_ID  => $path_params->{reply_id},
-            COLS_NAME => 1
-          });
-        },
-        module       => 'Msgs',
-        credentials  => [
-          'ADMIN'
-        ]
-      },
-      {
-        method      => 'GET',
-        path        => '/msgs/chapters/',
-        handler     => sub {
-          my ($path_params, $query_params, $module_obj) = @_;
-
-          $module_obj->chapters_list({
-            %$query_params,
-            COLS_NAME => 1
-          });
-        },
-        module      => 'Msgs',
-        credentials => [
-          'ADMIN'
-        ]
-      },
-    ],
     #TODO DELETE IT IF USELESS
     # pages     => [
     #   {
@@ -1322,8 +1203,6 @@ sub list {
 
           $module_obj->user_set_credit({
             UID           => $path_params->{uid},
-            COLS_NAME     => 1,
-            PAGE_ROWS     => 1,
             change_credit => 1
           });
         },
@@ -1340,8 +1219,6 @@ sub list {
 
           $module_obj->user_set_credit({
             UID       => $path_params->{uid},
-            COLS_NAME => 1,
-            PAGE_ROWS => 1
           });
         },
         module      => 'Control::Service_control',
@@ -1355,7 +1232,7 @@ sub list {
         handler     => sub {
           my ($path_params, $query_params, $module_obj) = @_;
 
-          $module_obj->user_list({
+          my $tariffs_list = $module_obj->user_list({
             UID             => $path_params->{uid},
             CID             => '_SHOW',
             INTERNET_STATUS => '_SHOW',
@@ -1366,6 +1243,36 @@ sub list {
             COLS_NAME       => 1,
             PAGE_ROWS       => 1
           });
+
+          require Shedule;
+          Shedule->import();
+          my $Schedule = Shedule->new($self->{db}, $self->{admin}, $self->{conf});
+          $Schedule->info({ UID => $path_params->{uid}, TYPE => 'tp', MODULE => 'Internet' });
+          if (scalar(@{$tariffs_list}) && $Schedule->{TOTAL} > 0)  {
+            my $action = $Schedule->{ACTION};
+            my $service_id = 0;
+            if ($action =~ /:/) {
+              ($service_id, $action) = split(/:/, $action);
+            }
+            $tariffs_list->[0]->{Schedule} = {
+              SHEDULE_ID => $Schedule->{SHEDULE_ID},
+              DATE       => $Schedule->{DATE},
+              DATE_FROM  => "$Schedule->{Y}-$Schedule->{M}-$Schedule->{D}",
+              TP_ID      => $action
+            };
+          }
+
+          my $speed = $module_obj->get_speed({
+            UID       => $path_params->{uid},
+            TP_ID     => $tariffs_list->[0]->{tp_id},
+            COLS_NAME => 1,
+            PAGE_ROWS => 1
+          });
+
+          $tariffs_list->[0]->{in_speed} = $speed->[0]->{in_speed};
+          $tariffs_list->[0]->{out_speed} = $speed->[0]->{out_speed};
+
+          return $tariffs_list;
         },
         module      => 'Internet',
         credentials => [
@@ -1407,6 +1314,23 @@ sub list {
         ]
       },
       {
+        method      => 'GET',
+        path        => '/user/:uid/internet/:id/holdup/',
+        handler     => sub {
+          my ($path_params, $query_params, $module_obj) = @_;
+
+          $module_obj->user_holdup({
+            UID          => $path_params->{uid},
+            ID           => $path_params->{id},
+            ACCEPT_RULES => 1
+          });
+        },
+        module      => 'Control::Service_control',
+        credentials => [
+          'USER'
+        ]
+      },
+      {
         method      => 'POST',
         path        => '/user/:uid/internet/:id/holdup/',
         handler     => sub {
@@ -1416,8 +1340,6 @@ sub list {
             %$query_params,
             UID          => $path_params->{uid},
             ID           => $path_params->{id},
-            COLS_NAME    => 1,
-            PAGE_ROWS    => 1,
             add          => 1,
             ACCEPT_RULES => 1
           });
@@ -1434,11 +1356,9 @@ sub list {
           my ($path_params, $query_params, $module_obj) = @_;
 
           $module_obj->user_holdup({
-            UID       => $path_params->{uid},
-            ID        => $path_params->{id},
-            del       => 1,
-            COLS_NAME => 1,
-            PAGE_ROWS => 1
+            UID         => $path_params->{uid},
+            ID          => $path_params->{id},
+            del         => 1,
           });
         },
         module      => 'Control::Service_control',
@@ -1504,9 +1424,9 @@ sub list {
 
           $module_obj->user_chg_tp({
             %$query_params,
-            UID    => $path_params->{uid},
-            ID     => $path_params->{id},
-            MODULE => 'Internet'
+            UID          => $path_params->{uid},
+            ID           => $path_params->{id}, #ID from internet main
+            MODULE       => 'Internet'
           });
         },
         module      => 'Control::Service_control',
@@ -1514,117 +1434,150 @@ sub list {
           'USER'
         ]
       },
-
       {
-        method      => 'GET',
-        path        => '/user/:uid/msgs/',
+        method      => 'DELETE',
+        path        => '/user/:uid/internet/:id/',
         handler     => sub {
           my ($path_params, $query_params, $module_obj) = @_;
 
-          $module_obj->messages_list({
-            COLS_NAME     => 1,
-            SUBJECT       => '_SHOW',
-            STATE_ID      => '_SHOW',
-            DATE          => '_SHOW',
-            MESSAGE       => '_SHOW',
-            CHAPTER_NAME  => '_SHOW',
-            CHAPTER_COLOR => '_SHOW',
-            STATE         => '_SHOW',
-            UID           => $path_params->{uid}
+          $module_obj->del_user_chg_shedule({
+            UID        => $path_params->{uid},
+            SHEDULE_ID => $path_params->{id}
           });
         },
-        module      => 'Msgs',
+        module      => 'Control::Service_control',
         credentials => [
           'USER'
         ]
       },
       {
-        method      => 'POST',
-        path        => '/user/:uid/msgs/',
+        method      => 'GET',
+        path        => '/user/:uid/iptv/services/',
         handler     => sub {
           my ($path_params, $query_params, $module_obj) = @_;
 
-          $module_obj->message_add({
+          $module_obj->services_list({
+            NAME        => '_SHOW',
+            USER_PORTAL => '>0',
+            COLS_NAME   => 1
+          });
+        },
+        module      => 'Iptv',
+        credentials => [
+          'USER'
+        ]
+      },
+      {
+        method      => 'GET',
+        path        => '/user/:uid/iptv/:id/tariffs/',
+        handler     => sub {
+          my ($path_params, $query_params, $module_obj) = @_;
+
+          my $test = $module_obj->available_tariffs({
+            SKIP_NOT_AVAILABLE_TARIFFS => 1,
+            ID                         => $path_params->{id},
+            UID                        => $path_params->{uid},
+            MODULE                     => 'Iptv'
+          });
+
+          return $test;
+        },
+        module      => 'Control::Service_control',
+        credentials => [
+          'USER'
+        ]
+      },
+      {
+        method      => 'GET',
+        path        => '/user/:uid/iptv/:id/tariffs/all/',
+        handler     => sub {
+          my ($path_params, $query_params, $module_obj) = @_;
+
+          $module_obj->available_tariffs({
+            ID     => $path_params->{id},
+            UID    => $path_params->{uid},
+            MODULE => 'Iptv'
+          });
+        },
+        module      => 'Control::Service_control',
+        credentials => [
+          'USER'
+        ]
+      },
+      {
+        method      => 'GET',
+        path        => '/user/:uid/iptv/:id/warnings/',
+        handler     => sub {
+          my ($path_params, $query_params, $module_obj) = @_;
+
+          $module_obj->service_warning({
+            UID    => $path_params->{uid},
+            ID     => $path_params->{id},
+            MODULE => 'Iptv'
+          });
+        },
+        module      => 'Control::Service_control',
+        credentials => [
+          'USER'
+        ]
+      },
+      {
+        method      => 'PUT',
+        path        => '/user/:uid/iptv/:id/',
+        handler     => sub {
+          my ($path_params, $query_params, $module_obj) = @_;
+
+          $module_obj->user_chg_tp({
             %$query_params,
-            UID => $path_params->{uid}
+            UID               => $path_params->{uid},
+            ID                => $path_params->{id}, #ID from iptv main
+            DISABLE_CHANGE_TP => 1,
+            MODULE            => 'Iptv'
           });
         },
-        module      => 'Msgs',
+        module      => 'Control::Service_control',
+        credentials => [
+          'USER'
+        ]
+      },
+      {
+        method      => 'DELETE',
+        path        => '/user/:uid/iptv/:id/',
+        handler     => sub {
+          my ($path_params, $query_params, $module_obj) = @_;
+
+          $module_obj->del_user_chg_shedule({
+            UID        => $path_params->{uid},
+            SHEDULE_ID => $path_params->{id}
+          });
+        },
+        module      => 'Control::Service_control',
         credentials => [
           'USER'
         ]
       },
       {
         method      => 'GET',
-        path        => '/user/:uid/msgs/:id/',
+        path        => '/user/:uid/iptv/',
         handler     => sub {
           my ($path_params, $query_params, $module_obj) = @_;
 
-          $module_obj->message_info($path_params->{id}, { UID => $path_params->{uid} });
-        },
-        module      => 'Msgs',
-        credentials => [
-          'USER'
-        ]
-      },
-      {
-        method      => 'GET',
-        path        => '/user/:uid/msgs/:id/reply/',
-        handler     => sub {
-          my ($path_params, $query_params, $module_obj) = @_;
-
-          my $list = $module_obj->messages_reply_list({
-            MSG_ID    => $path_params->{id},
-            UID       => $path_params->{uid},
-            LOGIN     => '_SHOW',
-            ADMIN     => '_SHOW',
-            COLS_NAME => 1
-          });
-
-          my $first_msg = $module_obj->message_info($path_params->{id}, { UID => $path_params->{uid} });
-
-          unshift @$list, {
-            'creator_id' => ($first_msg->{AID} || q{}),
-            'admin' => '',
-            'datetime' => ($first_msg->{DATE} || q{}),
-            'survey_id' => ($first_msg->{SURVEY_ID} || q{}),
-            'status' => 0,
-            'uid' => ($first_msg->{UID} || q{}),,
-            'caption' => '',
-            'run_time' => '',
-            'creator_fio' => '',
-            'inner_msg' => ($first_msg->{INNER_MSG} || q{}),
-            'content_size' => undef,
-            'main_msg' => 0,
-            'ip' => ($first_msg->{IP} || q{}),
-            'attachment_id' => undef,
-            'text' => ($first_msg->{MESSAGE} || q{}),
-            'filename' => undef,
-            'id' => $path_params->{id},
-            'aid' => ($first_msg->{AID} || q{})
-          };
-
-          return $list;
-        },
-        module      => 'Msgs',
-        credentials => [
-          'USER'
-        ]
-      },
-      {
-        #TODO: ticket status is not changing
-        method      => 'POST',
-        path        => '/user/:uid/msgs/:id/reply/',
-        handler     => sub {
-          my ($path_params, $query_params, $module_obj) = @_;
-
-          $module_obj->message_reply_add({
-            %$query_params,
-            ID  => $path_params->{id},
-            UID => $path_params->{uid}
+          $module_obj->user_list({
+            UID          => $path_params->{uid},
+            SERVICE_ID   => '_SHOW',
+            TP_FILTER    => '_SHOW',
+            MONTH_FEE    => '_SHOW',
+            DAY_FEE      => '_SHOW',
+            TP_NAME      => '_SHOW',
+            SUBSCRIBE_ID => '_SHOW',
+            CID          => '_SHOW',
+            EMAIL        => '_SHOW',
+            MAC_CID      => '_SHOW',
+            COLS_NAME    => 1,
+            PAGE_ROWS    => 1
           });
         },
-        module      => 'Msgs',
+        module      => 'Iptv',
         credentials => [
           'USER'
         ]
@@ -1654,9 +1607,9 @@ sub list {
             UID       => $path_params->{uid},
             DSC       => '_SHOW',
             SUM       => '_SHOW',
-            REG_DATE  => '_SHOW',
+            DATETIME  => '_SHOW',
             EXT_ID    => '_SHOW',
-            PAGE_ROWS => ($query_params->{PAGE_ROWS} || 25),
+            PAGE_ROWS => ($query_params->{PAGE_ROWS} || 10000),
             COLS_NAME => 1
           });
         },
@@ -1675,8 +1628,8 @@ sub list {
             UID       => $path_params->{uid},
             DSC       => '_SHOW',
             SUM       => '_SHOW',
-            REG_DATE  => '_SHOW',
-            PAGE_ROWS => ($query_params->{PAGE_ROWS} || 25),
+            DATETIME  => '_SHOW',
+            PAGE_ROWS => ($query_params->{PAGE_ROWS} || 10000),
             COLS_NAME => 1
           });
         },
@@ -1686,27 +1639,125 @@ sub list {
         ]
       },
       {
-        method      => 'GET',
-        path        => '/user/:uid/docs/',
+        method      => 'POST',
+        path        => '/user/:uid/contacts/push/subscribe/',
         handler     => sub {
           my ($path_params, $query_params, $module_obj) = @_;
 
-          my $list = $module_obj->docs_receipt_list( {
-            LOGIN         => '_SHOW',
-            DATETIME      => '_SHOW',
-            FIO           => '_SHOW',
-            PHONE         => '_SHOW',
-            TOTAL_SUM     => '_SHOW',
-            CONTRACT_ID   => '_SHOW',
-            CONTRACT_DATE => '_SHOW',
-            ADDRESS_FULL  => '_SHOW',
-            UID           => $path_params->{uid},
-            COLS_NAME     => 1,
-          } );
+          return {
+            errstr => 'No field token in body',
+            errno  => '5000'
+          } if (!$query_params->{TOKEN});
+          my $list = $module_obj->contacts_list({
+            UID   => $path_params->{uid},
+            TYPE  => 15,
+            VALUE => '_SHOW'
+          });
 
-          return $list;
+          my $Ureports = '';
+          eval {require Ureports; Ureports->import()};
+          if (!$@) {
+            $Ureports = Ureports->new($self->{db}, $self->{conf}, $self->{admin});
+          }
+
+          if ($list && !scalar(@{$list})) {
+            $module_obj->contacts_add({
+              TYPE_ID => 15,
+              VALUE   => $query_params->{TOKEN},
+              UID     => $path_params->{uid},
+            });
+
+            if ($Ureports) {
+              $Ureports->user_send_type_add({
+                TYPE        => 15,
+                DESTINATION => $query_params->{TOKEN},
+                UID         => $path_params->{uid}
+              });
+            }
+          }
+          else {
+            if ($query_params->{TOKEN} ne $list->[0]->{value}) {
+              $module_obj->contacts_change({
+                ID    => $list->[0]->{id},
+                VALUE => $query_params->{TOKEN},
+              });
+
+              if ($Ureports) {
+                $Ureports->user_send_type_del({
+                  TYPE        => 15,
+                  UID         => $path_params->{uid},
+                });
+
+                $Ureports->user_send_type_add({
+                  DESTINATION => $query_params->{TOKEN},
+                  TYPE        => 15,
+                  UID         => $path_params->{uid},
+                });
+              }
+
+              return 1;
+            }
+            else {
+              return {
+                errstr => 'You are already subscribed',
+                errno  => '5001'
+              }
+            }
+          }
         },
-        module      => 'Docs',
+        module      => 'Contacts',
+        credentials => [
+          'USER'
+        ]
+      },
+      {
+        method      => 'DELETE',
+        path        => '/user/:uid/contacts/push/subscribe/',
+        handler     => sub {
+          my ($path_params, $query_params, $module_obj) = @_;
+
+          $module_obj->contacts_del({
+            TYPE_ID => 15,
+            UID     => $path_params->{uid},
+          });
+
+          my $Ureports = '';
+          eval {require Ureports; Ureports->import()};
+          if (!$@) {
+            $Ureports = Ureports->new($self->{db}, $self->{conf}, $self->{admin});
+          }
+
+          if ($Ureports) {
+            $Ureports->user_send_type_del({
+              TYPE => 15,
+              UID  => $path_params->{uid}
+            });
+          }
+
+          return 1;
+        },
+        module      => 'Contacts',
+        credentials => [
+          'USER'
+        ]
+      },
+      {
+        method      => 'GET',
+        path        => '/user/:uid/contacts/push/subscribe/',
+        handler     => sub {
+          my ($path_params, $query_params, $module_obj) = @_;
+
+          my $list = $module_obj->contacts_list({
+            UID   => $path_params->{uid},
+            TYPE  => 15,
+            VALUE => '_SHOW'
+          });
+
+          delete @{$list->[0]}{qw/type_id id/} if ($list->[0]);
+
+          return $list->[0] || {};
+        },
+        module      => 'Contacts',
         credentials => [
           'USER'
         ]

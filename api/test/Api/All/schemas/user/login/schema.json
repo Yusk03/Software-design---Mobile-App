@@ -3,13 +3,25 @@
   "type": "object",
   "title": "The Root Schema",
   "required": [
-    "sid"
+    "sid",
+    "uid",
+    "login"
   ],
   "properties": {
     "sid": {
-      "$id": "#/properties/TABLE_USER_ABON",
+      "$id": "#/properties/sid",
       "type": "string",
       "title": "Session id"
+    },
+    "uid": {
+      "$id": "#/properties/uid",
+      "type": "integer",
+      "title": "user id"
+    },
+    "login": {
+      "$id": "#/properties/login",
+      "type": "string",
+      "title": "user login"
     }
   }
 }

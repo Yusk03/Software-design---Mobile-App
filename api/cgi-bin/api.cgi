@@ -41,10 +41,11 @@ our (
   @WEEKDAYS,
   $base_dir,
   @REGISTRATION,
-  @MODULES
+  @MODULES,
+  %functions,
 );
 
-my $VERSION = 0.09;
+my $VERSION = 0.16;
 do 'Abills/Misc.pm';
 do '../libexec/config.pl';
 do $libpath . '/language/english.pl';
@@ -82,6 +83,11 @@ sub _start {
     $response = Abills::Base::json_former({ errstr => 'API didn\'t enable please enable API in config $conf{API_ENABLE}=1;', errno => 301 });
   }
   else {
+    if ($conf{API_NGINX} && $ENV{REQUEST_URI}) {
+      $ENV{REQUEST_URI} =~ s/\/api.cgi//;
+      $ENV{PATH_INFO} = $ENV{REQUEST_URI};
+    }
+
     #TODO : Fix %FORM add make possible to paste query params with request body
     my $router = Abills::Api::Router->new(($ENV{PATH_INFO} || q{}), $db, $user, $admin, $Conf->{conf}, \%FORM, \%lang, \@MODULES);
 
@@ -106,6 +112,7 @@ sub _start {
         defined $conf{API_FILDS_CAMELIZE} ? $conf{API_FILDS_CAMELIZE} : 1
       );
 
+      $router->{status} = 400 if (ref $router->{result} eq 'HASH' && ($router->{result}->{errno} || $router->{result}->{error}));
       $response = Abills::Base::json_former($router->{result}, {USE_CAMELIZE => $use_camelize, CONTROL_CHARACTERS => 1});
       $status = $router->{status};
     }
@@ -149,7 +156,11 @@ sub add_custom_paths {
     handler              => sub {
       my ($path_params, $query_params) = @_;
 
-      my ($uid, $sid, $login) = auth_user($query_params->{login}, $query_params->{password}, '');
+      my ($uid, $sid, $login) = auth_user($query_params->{login}, $query_params->{password}, '', {API => 1});
+
+      if (ref $uid eq 'HASH') {
+        return $uid;
+      }
 
       return {
         UID   => $uid,
@@ -158,16 +169,6 @@ sub add_custom_paths {
       }
     },
     no_decamelize_params => 1
-  });
-
-  $router->add_custom_handler('currency', {
-    method  => 'GET',
-    path    => '/currency/',
-    handler => sub {
-      return {
-        system_currency => $conf{SYSTEM_CURRENCY}
-      };
-    },
   });
 
   $router->add_custom_handler('version', {
@@ -182,6 +183,55 @@ sub add_custom_paths {
     },
   });
 
+  $router->add_custom_handler('user', {
+    method               => 'GET',
+    path                 => '/user/:uid/config/',
+    handler              => sub {
+      my ($path_params, $query_params) = @_;
+      require Control::Service_control;
+      Control::Service_control->import();
+      my $Service_control = Control::Service_control->new($db, $admin, \%conf, { HTML => $html, LANG => \%lang });
+
+      mk_menu([], { USER_FUNCTION_LIST => 1 });
+
+      %functions = reverse %functions;
+
+      if ($functions{internet_user_chg_tp}) {
+        my $list = $Service_control->available_tariffs({
+          UID    => $path_params->{uid},
+          MODULE => 'Internet'
+        });
+
+        if (ref $list ne 'ARRAY') {
+          delete $functions{internet_user_chg_tp};
+        }
+        else {
+          $functions{internet}{now} = 0 if ($conf{INTERNET_USER_CHG_TP_NOW});
+          $functions{internet}{next_month} = 1 if ($conf{INTERNET_USER_CHG_TP_NEXT_MONTH});
+          $functions{internet}{schedule} = 2 if ($conf{INTERNET_USER_CHG_TP_SHEDULE});
+        }
+      }
+
+      if ($conf{INTERNET_USER_SERVICE_HOLDUP}) {
+        $functions{internet_user_holdup} = '1000';
+      }
+
+      my $credit_info = $Service_control->user_set_credit({ UID => $path_params->{uid} });
+      unless ($credit_info->{error} || $credit_info->{errno}) {
+        $functions{user_credit} = '1001';
+      }
+
+      if ($conf{SYSTEM_CURRENCY}) {
+        $functions{system}{currency} = $conf{SYSTEM_CURRENCY};
+      }
+
+      return \%functions;
+    },
+    credentials => [
+      'USER'
+    ]
+  });
+
   return 1;
 }
 
@@ -194,7 +244,7 @@ sub add_credentials {
   my ($router) = @_;
 
   $router->add_credential('ADMIN', sub {
-    my $self = shift;
+    shift;
     my $API_KEY = $ENV{HTTP_KEY};
 
     return check_permissions('', '', '', { API_KEY => $API_KEY }) == 0;
@@ -209,6 +259,38 @@ sub add_credentials {
     $uid = $self->{path_params}{uid} ne $uid ? 0 : $uid if $self->{path_params}{uid};
     return $uid != 0;
   });
+
+  if ($ENV{REMOTE_ADDR} && $conf{BOT_APIS} && check_ip($ENV{REMOTE_ADDR}, $conf{BOT_APIS})) {
+    $router->add_credential('USERBOT', sub {
+      my $self = shift;
+
+      my %bot_types = (
+        VIBER    => 5,
+        TELEGRAM => 6
+      );
+
+      my $Bot_type = $bot_types{$ENV{HTTP_USERBOT}} || '--';
+      my $Bot_user = $ENV{HTTP_USERID} || '--';
+
+      require Contacts;
+      Contacts->import();
+      my $Contacts = Contacts->new($db, $admin, \%conf);
+
+      my $list = $Contacts->contacts_list({
+        TYPE  => $Bot_type,
+        VALUE => $Bot_user,
+        UID   => '_SHOW',
+      });
+
+      if ($Contacts->{TOTAL} < 1) {
+        return 0
+      }
+      else {
+        $self->{path_params}{uid} = $list->[0]->{uid};
+        return 1;
+      }
+    });
+  }
 
   return 1;
 }
